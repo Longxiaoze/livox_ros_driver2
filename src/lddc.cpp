@@ -1,4 +1,3 @@
-#include <rclcpp/rclcpp.hpp>
 //
 // The MIT License (MIT)
 //
@@ -28,17 +27,38 @@
 #include "comm/comm.h"
 
 #include <inttypes.h>
+#include <cstdlib>
 #include <iostream>
 #include <iomanip>
 #include <math.h>
+#include <pwd.h>
 #include <stdint.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 #include "include/ros_headers.h"
 
 #include "driver_node.h"
 #include "lds_lidar.h"
-#include <rclcpp/rclcpp.hpp>
+
+namespace {
+
+std::string ResolveHomeDirectory() {
+  const char *home = std::getenv("HOME");
+  if (home != nullptr && home[0] != '\0') {
+    return std::string(home);
+  }
+
+  struct passwd *pw = getpwuid(getuid());
+  if (pw != nullptr && pw->pw_dir != nullptr && pw->pw_dir[0] != '\0') {
+    return std::string(pw->pw_dir);
+  }
+
+  return "/tmp";
+}
+
+}  // namespace
+
 namespace livox_ros
 {
 
@@ -57,6 +77,7 @@ namespace livox_ros
   {
     publish_period_ns_ = kNsPerSecond / publish_frq_;
     lds_ = nullptr;
+    pointt = nullptr;
     memset(private_pub_, 0, sizeof(private_pub_));
     memset(private_imu_pub_, 0, sizeof(private_imu_pub_));
     global_pub_ = nullptr;
@@ -76,6 +97,7 @@ namespace livox_ros
   {
     publish_period_ns_ = kNsPerSecond / publish_frq_;
     lds_ = nullptr;
+    pointt = nullptr;
 #if 0
   bag_ = nullptr;
 #endif
@@ -115,7 +137,10 @@ namespace livox_ros
       }
     }
 #endif
-    munmap(pointt, sizeof(time_stamp) * 1);
+    if (pointt != nullptr) {
+      munmap(pointt, sizeof(time_stamp) * 1);
+      pointt = nullptr;
+    }
     std::cout << "lddc destory!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
   }
 
@@ -197,25 +222,37 @@ namespace livox_ros
     //******************************************************************** add code
     if (isOpended == false)
     {
-      const char *user_name = getlogin();
-      std::string path_for_time_stamp = "/home/" + std::string(user_name) + "/timeshare";
+      std::string path_for_time_stamp = ResolveHomeDirectory() + "/timeshare";
 
-      const char *shared_file_name = path_for_time_stamp.c_str();
-      int fd = open(shared_file_name, O_CREAT | O_RDWR | O_TRUNC, 0666);
+      int fd = open(path_for_time_stamp.c_str(), O_CREAT | O_RDWR | O_TRUNC, 0666);
       if (fd == -1)
       {
-        RCLCPP_ERROR(rclcpp::get_logger("livox_ros_driver2"),"open failed\n");
-        isOpended = false;
+        DRIVER_ERROR(*cur_node_, "open failed, path: %s", path_for_time_stamp.c_str());
       }
       else
       {
-        RCLCPP_ERROR(rclcpp::get_logger("livox_ros_driver2"),"open code: %d\n", fd);
-        isOpended = true;
+        if (lseek(fd, sizeof(time_stamp) * 1, SEEK_SET) == -1 || write(fd, "", 1) != 1)
+        {
+          DRIVER_ERROR(*cur_node_, "prepare shared file failed, path: %s", path_for_time_stamp.c_str());
+          close(fd);
+        }
+        else
+        {
+          void *mapped = mmap(NULL, sizeof(time_stamp) * 1,
+                              PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+          close(fd);
+          if (mapped == MAP_FAILED)
+          {
+            DRIVER_ERROR(*cur_node_, "mmap failed, path: %s", path_for_time_stamp.c_str());
+            pointt = nullptr;
+          }
+          else
+          {
+            pointt = static_cast<time_stamp *>(mapped);
+            isOpended = true;
+          }
+        }
       }
-      lseek(fd, sizeof(time_stamp) * 1, SEEK_SET);
-      write(fd, "", 1);
-      pointt = (time_stamp *)mmap(NULL, sizeof(time_stamp) * 1,
-                                  PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
     }
     //********************************************************************
 
@@ -282,7 +319,7 @@ namespace livox_ros
       pointt->low = timestamp;
       // printf("****************timestamp=%ld\n", timestamp);
 
-      RCLCPP_ERROR(rclcpp::get_logger("livox_ros_driver2"),"pointt->low=%ld\n", pointt->low);
+      ROS_ERROR("pointt->low=%ld\n", pointt->low);
     }
   }
 
@@ -308,9 +345,9 @@ namespace livox_ros
         timestamp = pkg.base_time;
       }
       pointt->low = timestamp;
-      // RCLCPP_ERROR(rclcpp::get_logger("livox_ros_driver2"),"Custom Point: %f\n", pointt->low*0.000000001);
-      // printf("****************timestamp=%ld\n", timestamp);
-      // RCLCPP_ERROR(rclcpp::get_logger("livox_ros_driver2"),"****************PublishCustomPointcloud\n");
+      // ROS_ERROR("Custom Point: %f\n", pointt->low*0.000000001);
+             // printf("****************timestamp=%ld\n", timestamp);
+      // ROS_ERROR("****************PublishCustomPointcloud\n");
 
       PublishCustomPointData(livox_msg, index);
     }
@@ -346,7 +383,7 @@ namespace livox_ros
       FillPointsToPclMsg(pkg, cloud);
       PublishPclData(index, timestamp, cloud);
 
-      RCLCPP_ERROR(rclcpp::get_logger("livox_ros_driver2"),"****************PublishPclMsg\n");
+      ROS_ERROR("****************PublishPclMsg\n");
     }
     return;
   }

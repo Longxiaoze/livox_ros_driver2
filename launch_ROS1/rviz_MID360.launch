@@ -14,6 +14,7 @@
 	<arg name="msg_frame_id" default="livox_frame"/>
 	<arg name="lidar_bag" default="true"/>
 	<arg name="imu_bag" default="true"/>
+	<arg name="enable_imu" default="true"/>
 	<!--user configure parameters for ros end--> 
 
 	<param name="xfer_format" value="$(arg xfer_format)"/>
@@ -27,6 +28,7 @@
 	<param name="frame_id" type="string" value="$(arg msg_frame_id)"/>
 	<param name="enable_lidar_bag" type="bool" value="$(arg lidar_bag)"/>
 	<param name="enable_imu_bag" type="bool" value="$(arg imu_bag)"/>
+	<param name="enable_imu" type="bool" value="$(arg enable_imu)"/>
 
 	<node name="livox_lidar_publisher2" pkg="livox_ros_driver2"
 	      type="livox_ros_driver2_node" required="true"

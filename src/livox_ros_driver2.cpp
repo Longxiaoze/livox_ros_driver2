@@ -59,6 +59,7 @@ int main(int argc, char **argv) {
   std::string frame_id = "livox_frame";
   bool lidar_bag = true;
   bool imu_bag   = false;
+  bool enable_imu = true;
 
   livox_node.GetNode().getParam("xfer_format", xfer_format);
   livox_node.GetNode().getParam("multi_topic", multi_topic);
@@ -68,6 +69,7 @@ int main(int argc, char **argv) {
   livox_node.GetNode().getParam("frame_id", frame_id);
   livox_node.GetNode().getParam("enable_lidar_bag", lidar_bag);
   livox_node.GetNode().getParam("enable_imu_bag", imu_bag);
+  livox_node.GetNode().getParam("enable_imu", enable_imu);
 
   printf("data source:%u.\n", data_src);
 
@@ -94,6 +96,7 @@ int main(int argc, char **argv) {
     DRIVER_INFO(livox_node, "Config file : %s", user_config_path.c_str());
 
     LdsLidar *read_lidar = LdsLidar::GetInstance(publish_freq);
+    read_lidar->SetEnableImu(enable_imu);
     livox_node.lddc_ptr_->RegisterLds(static_cast<Lds *>(read_lidar));
 
     if ((read_lidar->InitLdsLidar(user_config_path))) {
@@ -106,7 +109,11 @@ int main(int argc, char **argv) {
   }
 
   livox_node.pointclouddata_poll_thread_ = std::make_shared<std::thread>(&DriverNode::PointCloudDataPollThread, &livox_node);
-  livox_node.imudata_poll_thread_ = std::make_shared<std::thread>(&DriverNode::ImuDataPollThread, &livox_node);
+  if (enable_imu) {
+    livox_node.imudata_poll_thread_ = std::make_shared<std::thread>(&DriverNode::ImuDataPollThread, &livox_node);
+  } else {
+    DRIVER_INFO(livox_node, "IMU publishing disabled by parameter enable_imu=false.");
+  }
   while (ros::ok()) { usleep(10000); }
 
   return 0;
@@ -127,12 +134,14 @@ DriverNode::DriverNode(const rclcpp::NodeOptions & node_options)
   double publish_freq = 10.0; /* Hz */
   int output_type = kOutputToRos;
   std::string frame_id;
+  bool enable_imu = true;
 
   this->declare_parameter("xfer_format", xfer_format);
   this->declare_parameter("multi_topic", 0);
   this->declare_parameter("data_src", data_src);
   this->declare_parameter("publish_freq", 10.0);
   this->declare_parameter("output_data_type", output_type);
+  this->declare_parameter("enable_imu", true);
   this->declare_parameter("frame_id", "frame_default");
   this->declare_parameter("user_config_path", "path_default");
   this->declare_parameter("cmdline_input_bd_code", "000000000000001");
@@ -143,6 +152,7 @@ DriverNode::DriverNode(const rclcpp::NodeOptions & node_options)
   this->get_parameter("data_src", data_src);
   this->get_parameter("publish_freq", publish_freq);
   this->get_parameter("output_data_type", output_type);
+  this->get_parameter("enable_imu", enable_imu);
   this->get_parameter("frame_id", frame_id);
 
   if (publish_freq > 100.0) {
@@ -170,6 +180,7 @@ DriverNode::DriverNode(const rclcpp::NodeOptions & node_options)
     this->get_parameter("cmdline_input_bd_code", cmdline_bd_code);
 
     LdsLidar *read_lidar = LdsLidar::GetInstance(publish_freq);
+    read_lidar->SetEnableImu(enable_imu);
     lddc_ptr_->RegisterLds(static_cast<Lds *>(read_lidar));
 
     if ((read_lidar->InitLdsLidar(user_config_path))) {
@@ -182,7 +193,11 @@ DriverNode::DriverNode(const rclcpp::NodeOptions & node_options)
   }
 
   pointclouddata_poll_thread_ = std::make_shared<std::thread>(&DriverNode::PointCloudDataPollThread, this);
-  imudata_poll_thread_ = std::make_shared<std::thread>(&DriverNode::ImuDataPollThread, this);
+  if (enable_imu) {
+    imudata_poll_thread_ = std::make_shared<std::thread>(&DriverNode::ImuDataPollThread, this);
+  } else {
+    DRIVER_INFO(*this, "IMU publishing disabled by parameter enable_imu=false.");
+  }
 }
 
 }  // namespace livox_ros
@@ -212,7 +227,6 @@ void DriverNode::ImuDataPollThread()
     status = future_.wait_for(std::chrono::microseconds(0));
   } while (status == std::future_status::timeout);
 }
-
 
 
 

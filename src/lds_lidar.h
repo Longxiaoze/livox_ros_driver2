@@ -53,6 +53,8 @@ class LdsLidar final : public Lds {
   bool Start();
 
   int DeInitLdsLidar(void);
+  void SetEnableImu(bool enable) { enable_imu_ = enable; }
+  bool IsImuEnabled() const { return enable_imu_; }
  private:
   LdsLidar(double publish_freq);
   LdsLidar(const LdsLidar &) = delete;
@@ -86,6 +88,7 @@ class LdsLidar final : public Lds {
 
 
   bool auto_connect_mode_;
+  bool enable_imu_;
   uint32_t whitelist_count_;
   volatile bool is_initialized_;
   char broadcast_code_whitelist_[kMaxLidarCount][kBroadcastCodeSize];

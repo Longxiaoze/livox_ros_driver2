@@ -64,6 +64,7 @@ LdsLidar *g_lds_ldiar = nullptr;
 LdsLidar::LdsLidar(double publish_freq)
     : Lds(publish_freq, kSourceRawLidar), 
       auto_connect_mode_(true),
+      enable_imu_(true),
       whitelist_count_(0),
       is_initialized_(false) {
   memset(broadcast_code_whitelist_, 0, sizeof(broadcast_code_whitelist_));
@@ -185,7 +186,12 @@ bool LdsLidar::InitLivoxLidar() {
 
 void LdsLidar::SetLidarPubHandle() {
   pub_handler().SetPointCloudsCallback(LidarCommonCallback::OnLidarPointClounCb, g_lds_ldiar);
-  pub_handler().SetImuDataCallback(LidarCommonCallback::LidarImuDataCallback, g_lds_ldiar);
+  if (enable_imu_) {
+    pub_handler().SetImuDataCallback(LidarCommonCallback::LidarImuDataCallback, g_lds_ldiar);
+  } else {
+    pub_handler().SetImuDataCallback(nullptr, nullptr);
+    std::cout << "IMU callback disabled by parameter enable_imu." << std::endl;
+  }
 
   double publish_freq = Lds::GetLdsFrequency();
   pub_handler().SetPointCloudConfig(publish_freq);
