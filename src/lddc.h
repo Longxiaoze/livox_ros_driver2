@@ -110,7 +110,7 @@ class Lddc final {
 
  public:
   Lds *lds_;
-  time_stamp *pointt;
+  time_stamp *pointt = nullptr;
  private:
   void PollingLidarPointCloudData(uint8_t index, LidarDevice *lidar);
   void PollingLidarImuData(uint8_t index, LidarDevice *lidar);
